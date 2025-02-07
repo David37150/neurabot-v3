@@ -1,26 +1,34 @@
-from fastapi import FastAPI
-import openai
-import os
+import streamlit as st
 import requests
-from dotenv import load_dotenv
 
-# Charger les variables d'environnement
-load_dotenv()
+# URL de l'API de NeuraBot
+API_URL = "https://neurabot-v3.onrender.com/ask"
 
-app = FastAPI()
+# Interface utilisateur
+st.set_page_config(page_title="NeuraBot", page_icon="🤖", layout="centered")
 
-@app.get("/")
-def home():
-    return {"message": "Bienvenue sur NeuraBot !"}
+st.title("🤖 NeuraBot - Chat / ADS  IA Assistance")
+st.write("Pose-moi une question et je vais chercher la réponse pour toi ! 🔍")
 
-@app.get("/ask")
-def ask(question: str):
-    """Pose une question à NeuraBot"""
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": question}]
-        )
-        return {"question": question, "response": response["choices"][0]["message"]["content"]}
-    except Exception as e:
-        return {"error": str(e)}
+# Champ de saisie pour poser des questions
+user_input = st.text_input("Votre question :", "")
+
+if st.button("Poser la question"):
+    if user_input:
+        try:
+            # Envoi de la requête à l'API
+            response = requests.get(API_URL, params={"question": user_input})
+            data = response.json()
+            st.subheader("Réponse :")
+            st.write(data.get("response", "❌ Erreur : Aucune réponse reçue."))
+        except Exception as e:
+            st.error(f"❌ Erreur lors de la requête : {e}")
+    else:
+        st.warning("Veuillez entrer une question avant d'envoyer !")
+
+
+
+
+
+
+        
