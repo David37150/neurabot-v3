@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -36,6 +37,15 @@ app.add_middleware(
     allow_headers=["*"],  # Autoriser tous les headers
 )
 
+# Charger les réponses stockées
+def load_responses():
+    if os.path.exists("reponses.json"):
+        with open("reponses.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+responses = load_responses()
+
 def search_web(query):
     """Recherche Google via SerpAPI"""
     try:
@@ -61,17 +71,33 @@ def home():
 def ask(question: str):
     """Pose une question à NeuraBot"""
     try:
+        # 1️⃣ Vérifier si la question a une réponse enregistrée
+        if question in responses:
+            prepared_response = responses[question]
+
+            # Reformuler la réponse avec OpenAI
+            reformulated_response = client.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=[
+                    {"role": "system", "content": "Reformule cette réponse de manière plus naturelle et engageante."},
+                    {"role": "user", "content": prepared_response}
+                ]
+            )
+            return {"question": question, "response": reformulated_response.choices[0].message.content}
+
+        # 2️⃣ Sinon, on cherche une réponse avec SerpAPI + OpenAI
         web_results = search_web(question)
         context = " ".join(web_results) if web_results else "Je n'ai rien trouvé."
 
         prompt = f"Réponds à cette question en te basant sur les informations suivantes : {context}\nQuestion : {question}\nRéponse :"
         
-        # Nouvelle syntaxe OpenAI
+        # Réponse via OpenAI
         response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
 
         return {"question": question, "response": response.choices[0].message.content}
+    
     except Exception as e:
         return {"error": f"❌ Erreur : {str(e)}"}
