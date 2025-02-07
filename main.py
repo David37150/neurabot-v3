@@ -2,6 +2,7 @@ import os
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI  # Nouvelle importation pour openai>=1.0.0
 
 # Charger les variables d'environnement
@@ -25,6 +26,15 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Initialiser FastAPI
 app = FastAPI()
+
+# ✅ Ajout du middleware CORS pour autoriser les requêtes depuis ton site
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://neurainvests.com"],  # Autoriser uniquement ton site
+    allow_credentials=True,
+    allow_methods=["GET"],  # Autoriser seulement les requêtes GET
+    allow_headers=["*"],  # Autoriser tous les headers
+)
 
 def search_web(query):
     """Recherche Google via SerpAPI"""
