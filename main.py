@@ -1,33 +1,41 @@
 import os
 import json
 import requests
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pytrends.request import TrendReq  # 🔹 Import pour Google Trends
 
-# Charger les variables d'environnement
-if not dotenv_loaded:
-    print("⚠️ Erreur : Impossible de charger le fichier .env")
-
+# ✅ Charger les variables d'environnement (depuis Render)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
 SHOPIFY_PASSWORD = os.getenv("SHOPIFY_PASSWORD")
 SHOPIFY_STORE_NAME = os.getenv("SHOPIFY_STORE_NAME")
 
-if not OPENAI_API_KEY or not SHOPIFY_API_KEY or not SHOPIFY_PASSWORD or not SHOPIFY_STORE_NAME:
-    print("⚠️ Erreur : Une ou plusieurs clés API sont manquantes.")
-    exit()
+# ✅ Vérification des clés API (évite le crash complet)
+missing_keys = []
+if not OPENAI_API_KEY:
+    missing_keys.append("OPENAI_API_KEY")
+if not SERPAPI_KEY:
+    missing_keys.append("SERPAPI_KEY")
+if not SHOPIFY_API_KEY:
+    missing_keys.append("SHOPIFY_API_KEY")
+if not SHOPIFY_PASSWORD:
+    missing_keys.append("SHOPIFY_PASSWORD")
+if not SHOPIFY_STORE_NAME:
+    missing_keys.append("SHOPIFY_STORE_NAME")
 
-# Configurer le client OpenAI
+if missing_keys:
+    print(f"⚠️ Erreur : Clés API manquantes {', '.join(missing_keys)}")
+
+# ✅ Configurer le client OpenAI
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Initialiser FastAPI
+# ✅ Initialiser FastAPI
 app = FastAPI()
 
-# Activer CORS pour autoriser les requêtes de ton site
+# ✅ Activer CORS pour autoriser les requêtes de ton site
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://neurainvests.com"],  # Autoriser uniquement ton site
@@ -39,7 +47,7 @@ app.add_middleware(
 # ✅ Charger les réponses enregistrées dans `reponses.json`
 def load_responses():
     """Charge `reponses.json` depuis ton site."""
-    url_reponses = "https://neurainvests.com/neurabot/reponses.json"  # 🔗 URL de ton fichier
+    url_reponses = "https://neurainvests.com/neurabot/reponses.json"
     try:
         response = requests.get(url_reponses)
         if response.status_code == 200:
@@ -96,7 +104,7 @@ def search_web(query):
         }
         response = requests.get(url, params=params)
         data = response.json()
-        return [res["snippet"] for res in data.get("organic_results", [])[:3]]  # Récupérer les 3 premiers résultats
+        return [res["snippet"] for res in data.get("organic_results", [])[:3]]
     except Exception as e:
         print(f"❌ Erreur SerpAPI : {e}")
         return ["Je n'ai pas pu récupérer d'informations."]
@@ -109,7 +117,6 @@ def home():
 def ask(question: str):
     """Pose une question à NeuraBot"""
     try:
-        # Vérifier si la question concerne NeuraInvests
         keywords = ["neurainvests", "neuraInvests", "neurabot", "neura bot"]
         if any(word in question.lower() for word in keywords):
             local_response = get_local_response(question)
@@ -121,13 +128,12 @@ def ask(question: str):
             if neurainvests_response:
                 return {"question": question, "response": neurainvests_response}
 
-        # Sinon, effectuer une recherche sur le web
+        # Recherche web si aucune réponse locale trouvée
         web_results = search_web(question)
         context = " ".join(web_results) if web_results else "Je n'ai rien trouvé."
 
         prompt = f"Réponds à cette question en te basant sur les informations suivantes : {context}\nQuestion : {question}\nRéponse :"
         
-        # Nouvelle syntaxe OpenAI
         response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[{"role": "user", "content": prompt}]
@@ -141,10 +147,11 @@ def ask(question: str):
 def get_shopify_products():
     """Récupère les produits depuis Shopify"""
     try:
-        url = f"https://{SHOPIFY_API_KEY}:{SHOPIFY_PASSWORD}@{SHOPIFY_STORE_NAME}.myshopify.com/admin/api/2023-01/products.json"
-        response = requests.get(url)
+        url = f"https://{SHOPIFY_STORE_NAME}.myshopify.com/admin/api/2023-01/products.json"
+        headers = {"X-Shopify-Access-Token": SHOPIFY_PASSWORD}
+        response = requests.get(url, headers=headers)
         if response.status_code == 200:
-            return [product["title"] for product in response.json()["products"]]
+            return [product["title"] for product in response.json().get("products", [])]
         else:
             print(f"⚠️ Erreur Shopify : {response.status_code} - {response.text}")
             return []
