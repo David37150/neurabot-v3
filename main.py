@@ -55,11 +55,22 @@ def load_responses():
 responses = load_responses()
 
 def get_local_response(question):
-    """Cherche une réponse locale dans reponses.json."""
+    """Cherche une réponse locale dans `reponses.json` et la reformule via OpenAI."""
     for key, value in responses.items():
         if key.lower() in question.lower():
-            return value
-    return None
+            # ✅ Reformuler la réponse avec OpenAI
+            prompt = f"Reformule cette réponse de manière plus naturelle et engageante : {value}"
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4-turbo",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                print(f"❌ Erreur lors de la reformulation OpenAI : {e}")
+                return value  # Si OpenAI échoue, on retourne la réponse brute
+
+    return None  # Si aucune réponse trouvée
 
 def search_neurainvests(question):
     """Effectue une recherche sur NeuraInvests en dernier recours."""
