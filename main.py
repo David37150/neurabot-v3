@@ -4,7 +4,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI  # Nouvelle importation pour openai>=1.0.0
+from openai import OpenAI
 
 # Charger les variables d'environnement
 dotenv_loaded = load_dotenv()
@@ -22,29 +22,57 @@ if not SERPAPI_KEY:
     print("⚠️ Erreur : Clé SerpAPI introuvable. Vérifie ton fichier .env !")
     exit()
 
-# Configurer le client OpenAI (nouvelle syntaxe)
+# Configurer le client OpenAI
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Initialiser FastAPI
 app = FastAPI()
 
-# ✅ Ajout du middleware CORS pour autoriser les requêtes depuis ton site
+# Activer CORS pour autoriser les requêtes de ton site
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://neurainvests.com"],  # Autoriser uniquement ton site
     allow_credentials=True,
-    allow_methods=["GET"],  # Autoriser seulement les requêtes GET
-    allow_headers=["*"],  # Autoriser tous les headers
+    allow_methods=["GET"],
+    allow_headers=["*"],
 )
 
-# Charger les réponses stockées
+# ✅ Charger les réponses enregistrées dans `reponses.json`
 def load_responses():
-    if os.path.exists("reponses.json"):
-        with open("reponses.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+    """Charge `reponses.json` depuis ton site."""
+    url_reponses = "https://neurainvests.com/neurabot/reponses.json"  # 🔗 URL de ton fichier
+    try:
+        response = requests.get(url_reponses)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"⚠️ Erreur de chargement de `reponses.json` : {response.status_code}")
+            return {}
+    except Exception as e:
+        print(f"❌ Impossible de charger `reponses.json` : {e}")
+        return {}
 
 responses = load_responses()
+
+def get_local_response(question):
+    """Cherche une réponse locale dans reponses.json."""
+    for key, value in responses.items():
+        if key.lower() in question.lower():
+            return value
+    return None
+
+def search_neurainvests(question):
+    """Effectue une recherche sur NeuraInvests en dernier recours."""
+    try:
+        url = f"https://neurainvests.com/search?q={question}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            return f"Consultez cette page pour plus d’informations : {url}"
+        else:
+            return None
+    except Exception as e:
+        print(f"❌ Erreur lors de la recherche sur NeuraInvests : {e}")
+        return None
 
 def search_web(query):
     """Recherche Google via SerpAPI"""
@@ -71,33 +99,30 @@ def home():
 def ask(question: str):
     """Pose une question à NeuraBot"""
     try:
-        # 1️⃣ Vérifier si la question a une réponse enregistrée
-        if question in responses:
-            prepared_response = responses[question]
+        # Vérifier si la question concerne NeuraInvests
+        keywords = ["neurainvests", "neuraInvests", "neurabot", "neura bot"]
+        if any(word in question.lower() for word in keywords):
+            local_response = get_local_response(question)
+            if local_response:
+                return {"question": question, "response": local_response}
+            
+            # Si pas de réponse locale, chercher sur le site officiel
+            neurainvests_response = search_neurainvests(question)
+            if neurainvests_response:
+                return {"question": question, "response": neurainvests_response}
 
-            # Reformuler la réponse avec OpenAI
-            reformulated_response = client.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=[
-                    {"role": "system", "content": "Reformule cette réponse de manière plus naturelle et engageante."},
-                    {"role": "user", "content": prepared_response}
-                ]
-            )
-            return {"question": question, "response": reformulated_response.choices[0].message.content}
-
-        # 2️⃣ Sinon, on cherche une réponse avec SerpAPI + OpenAI
+        # Sinon, effectuer une recherche sur le web
         web_results = search_web(question)
         context = " ".join(web_results) if web_results else "Je n'ai rien trouvé."
 
         prompt = f"Réponds à cette question en te basant sur les informations suivantes : {context}\nQuestion : {question}\nRéponse :"
         
-        # Réponse via OpenAI
+        # Nouvelle syntaxe OpenAI
         response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
 
         return {"question": question, "response": response.choices[0].message.content}
-    
     except Exception as e:
         return {"error": f"❌ Erreur : {str(e)}"}
