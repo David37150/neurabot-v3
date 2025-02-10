@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
+from pytrends.request import TrendReq  # 🔹 Import pour Google Trends
 
 # Charger les variables d'environnement
 dotenv_loaded = load_dotenv()
@@ -13,13 +14,12 @@ if not dotenv_loaded:
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
+SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
+SHOPIFY_PASSWORD = os.getenv("SHOPIFY_PASSWORD")
+SHOPIFY_STORE_NAME = os.getenv("SHOPIFY_STORE_NAME")
 
-if not OPENAI_API_KEY:
-    print("⚠️ Erreur : Clé OpenAI introuvable. Vérifie ton fichier .env !")
-    exit()
-
-if not SERPAPI_KEY:
-    print("⚠️ Erreur : Clé SerpAPI introuvable. Vérifie ton fichier .env !")
+if not OPENAI_API_KEY or not SHOPIFY_API_KEY or not SHOPIFY_PASSWORD or not SHOPIFY_STORE_NAME:
+    print("⚠️ Erreur : Une ou plusieurs clés API sont manquantes.")
     exit()
 
 # Configurer le client OpenAI
@@ -137,3 +137,37 @@ def ask(question: str):
         return {"question": question, "response": response.choices[0].message.content}
     except Exception as e:
         return {"error": f"❌ Erreur : {str(e)}"}
+
+# ✅ ROUTE PRODUITS TENDANCE
+def get_shopify_products():
+    """Récupère les produits depuis Shopify"""
+    try:
+        url = f"https://{SHOPIFY_API_KEY}:{SHOPIFY_PASSWORD}@{SHOPIFY_STORE_NAME}.myshopify.com/admin/api/2023-01/products.json"
+        response = requests.get(url)
+        if response.status_code == 200:
+            return [product["title"] for product in response.json()["products"]]
+        else:
+            print(f"⚠️ Erreur Shopify : {response.status_code} - {response.text}")
+            return []
+    except Exception as e:
+        print(f"❌ Erreur lors de la récupération des produits Shopify : {e}")
+        return []
+
+def get_trending_score(product_name):
+    """Analyse la popularité avec Google Trends"""
+    try:
+        pytrends = TrendReq(hl='fr-FR', tz=360)
+        pytrends.build_payload([product_name], timeframe='today 3-m', geo='FR')
+        trends_data = pytrends.interest_over_time()
+        return trends_data[product_name].mean() if not trends_data.empty else 0
+    except Exception as e:
+        print(f"❌ Erreur Google Trends : {e}")
+        return 0
+
+@app.get("/trending-products")
+def get_trending_products():
+    """Endpoint pour récupérer les produits tendances"""
+    products = get_shopify_products()
+    trending_products = [{"nom": p, "score_tendance": get_trending_score(p)} for p in products]
+    trending_products.sort(key=lambda x: x["score_tendance"], reverse=True)
+    return {"trending_products": trending_products[:10]}  # Top 10 produits
