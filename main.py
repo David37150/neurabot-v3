@@ -8,7 +8,6 @@ from openai import OpenAI
 from pytrends.request import TrendReq  # 🔹 Import pour Google Trends
 
 # Charger les variables d'environnement
-dotenv_loaded = load_dotenv()
 if not dotenv_loaded:
     print("⚠️ Erreur : Impossible de charger le fichier .env")
 
