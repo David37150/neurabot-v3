@@ -147,9 +147,14 @@ def ask(question: str):
 def get_shopify_products():
     """Récupère les produits depuis Shopify"""
     try:
-        url = f"https://{SHOPIFY_STORE_NAME}.myshopify.com/admin/api/2023-01/products.json"
-        headers = {"X-Shopify-Access-Token": SHOPIFY_PASSWORD}
-        response = requests.get(url, headers=headers)
+        shopify_url = f"https://{SHOPIFY_STORE_NAME}.myshopify.com/admin/api/2023-01/products.json"
+        
+        headers = {
+            "X-Shopify-Access-Token": SHOPIFY_PASSWORD  # Utilisation du token au lieu du password
+        }
+
+        response = requests.get(shopify_url, headers=headers, verify=False)  # ⚠ Désactiver SSL temporairement
+
         if response.status_code == 200:
             return [product["title"] for product in response.json().get("products", [])]
         else:
@@ -158,6 +163,7 @@ def get_shopify_products():
     except Exception as e:
         print(f"❌ Erreur lors de la récupération des produits Shopify : {e}")
         return []
+
 
 def get_trending_score(product_name):
     """Analyse la popularité avec Google Trends"""
