@@ -1,90 +1,67 @@
 import os
 import requests
+import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pytrends.request import TrendReq  
-from time import sleep
+from pytrends.request import TrendReq  # 📌 Pour interagir avec Google Trends
 
 # Initialiser FastAPI
 app = FastAPI()
 
-# Activer CORS pour permettre les requêtes depuis ton site
+# Activer CORS pour NeuraMarkets
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://neuramarkets.com", "https://neurainvests.com"],
+    allow_origins=["https://neuramarkets.com"],  # Autoriser seulement ce site
     allow_credentials=True,
     allow_methods=["GET"],
     allow_headers=["*"],
 )
 
 # Configuration de Google Trends
-pytrends = TrendReq(hl="fr-FR", tz=360, retries=5, backoff_factor=0.2)
+pytrends = TrendReq(hl="fr-FR", tz=360)
 
-# Catégories Google Trends
-CATEGORIES = {
-    "Beauté": 44,
-    "Santé": 45,
-    "Mode": 185,
-    "Électronique": 78,
-    "Informatique": 31,
-    "Enfant / Bébé": 137,
-    "Électroménager": 141,
-    "Sport": 20
-}
-
-# Pays disponibles
-GEO_LOCATIONS = {
-    "France": "FR",
-    "Europe": "",
-    "USA": "US"
-}
-
-# Récupération des produits depuis NeuraMarkets
+# 🔍 Fonction pour récupérer les produits de NeuraMarkets (API ou Scraping)
 def fetch_products():
     try:
-        url = "https://neuramarkets.com/api/products"
+        url = "https://neuramarkets.com/api/products"  # 📌 Adapter selon ton site
         response = requests.get(url)
-        response.raise_for_status()
-        return response.json()
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"⚠️ Erreur lors de la récupération des produits : {response.status_code}")
+            return []
     except Exception as e:
-        print(f"❌ Erreur récupération produits: {e}")
+        print(f"❌ Impossible d'obtenir les produits : {e}")
         return []
 
-# Obtenir la tendance d'un produit via Google Trends
-def get_trend_score(product_name, category=0, geo='FR'):
+# 🔥 Fonction pour analyser la tendance d'un produit sur Google Trends
+def get_trend_score(product_name):
     try:
-        pytrends.build_payload([product_name], cat=category, timeframe="today 3-m", geo=geo, gprop="")
+        pytrends.build_payload([product_name], cat=0, timeframe="now 7-d", geo="FR", gprop="")
         trend_data = pytrends.interest_over_time()
+
         if not trend_data.empty:
-            return trend_data[product_name].mean()
+            return trend_data[product_name].mean()  # 📌 Score moyen sur 7 jours
         return 0
     except Exception as e:
         print(f"❌ Erreur Google Trends pour {product_name}: {e}")
         return 0
 
-# Endpoint API pour récupérer les produits tendances filtrés
+# 🔝 Route API pour récupérer les produits tendances
 @app.get("/trending-products")
-def trending_products(category: str = "Beauté", geo: str = "France"):
-    if category not in CATEGORIES or geo not in GEO_LOCATIONS:
-        return {"error": "❌ Catégorie ou pays invalide."}
-
+def trending_products():
     products = fetch_products()
     if not products:
         return {"error": "❌ Aucune donnée produit récupérée."}
 
+    # 🔎 Analyse des tendances
     ranked_products = []
-    for idx, product in enumerate(products):
+    for product in products:
         name = product.get("name")
-        trend_score = get_trend_score(name, CATEGORIES[category], GEO_LOCATIONS[geo])
-        ranked_products.append({
-            "name": name,
-            "trend_score": trend_score,
-            "url": product.get("url")
-        })
+        trend_score = get_trend_score(name)
+        ranked_products.append({"name": name, "trend_score": trend_score, "url": product.get("url")})
 
-        # 🕒 Pause de 3 secondes entre chaque requête
-        sleep(3)
-
+    # 🔢 Trier par popularité décroissante
     ranked_products.sort(key=lambda x: x["trend_score"], reverse=True)
 
-    return {"trending_products": ranked_products[:10]}
+    return {"trending_products": ranked_products}
