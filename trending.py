@@ -1,67 +1,90 @@
-import os
+import time
 import requests
-import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pytrends.request import TrendReq  # 📌 Pour interagir avec Google Trends
+from pytrends.request import TrendReq  
 
 # Initialiser FastAPI
 app = FastAPI()
 
-# Activer CORS pour NeuraMarkets
+# Activer CORS pour permettre les requêtes depuis ton site
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://neuramarkets.com"],  # Autoriser seulement ce site
+    allow_origins=["https://neuramarkets.com", "https://neurainvests.com"],
     allow_credentials=True,
     allow_methods=["GET"],
     allow_headers=["*"],
 )
 
-# Configuration de Google Trends
-pytrends = TrendReq(hl="fr-FR", tz=360)
+# Liste des catégories Google Trends
+CATEGORIES = {
+    "Beauté": 44,
+    "Santé": 45,
+    "Mode": 185,
+    "Électronique": 78,
+    "Informatique": 31,
+    "Enfant / Bébé": 137,
+    "Électroménager": 141,
+    "Sport": 20
+}
 
-# 🔍 Fonction pour récupérer les produits de NeuraMarkets (API ou Scraping)
+# Pays disponibles
+GEO_LOCATIONS = {
+    "France": "FR",
+    "Europe": "",
+    "USA": "US"
+}
+
+# Fonction pour récupérer les produits de NeuraMarkets
 def fetch_products():
     try:
-        url = "https://neuramarkets.com/api/products"  # 📌 Adapter selon ton site
+        url = "https://neuramarkets.com/api/products"
         response = requests.get(url)
         if response.status_code == 200:
             return response.json()
         else:
-            print(f"⚠️ Erreur lors de la récupération des produits : {response.status_code}")
+            print(f"⚠️ Erreur récupération produits: {response.status_code}")
             return []
     except Exception as e:
-        print(f"❌ Impossible d'obtenir les produits : {e}")
+        print(f"❌ Erreur : {e}")
         return []
 
-# 🔥 Fonction pour analyser la tendance d'un produit sur Google Trends
-def get_trend_score(product_name):
+# Fonction pour obtenir la tendance d'un produit via Google Trends avec gestion des pauses
+def get_trend_score(product_name, category=0, geo='FR'):
     try:
-        pytrends.build_payload([product_name], cat=0, timeframe="now 7-d", geo="FR", gprop="")
+        pytrends = TrendReq(hl="fr-FR", tz=360)
+        pytrends.build_payload([product_name], cat=category, timeframe="today 3-m", geo=geo, gprop="")
         trend_data = pytrends.interest_over_time()
-
+        time.sleep(2)  # pause de sécurité de 2 secondes
         if not trend_data.empty:
-            return trend_data[product_name].mean()  # 📌 Score moyen sur 7 jours
+            return trend_data[product_name].mean()
         return 0
     except Exception as e:
-        print(f"❌ Erreur Google Trends pour {product_name}: {e}")
+        print(f"❌ Erreur Google Trends pour '{product_name}': {e}")
         return 0
 
-# 🔝 Route API pour récupérer les produits tendances
+# Endpoint API optimisé pour éviter l'erreur 429
 @app.get("/trending-products")
-def trending_products():
+def trending_products(category: str = "Beauté", geo: str = "France"):
+    if category not in CATEGORIES or geo not in GEO_LOCATIONS:
+        return {"error": "❌ Catégorie ou pays invalide."}
+
     products = fetch_products()
     if not products:
         return {"error": "❌ Aucune donnée produit récupérée."}
 
-    # 🔎 Analyse des tendances
+    # Limiter à 5 produits pour éviter les erreurs 429
     ranked_products = []
-    for product in products:
+    for product in products[:5]:
         name = product.get("name")
-        trend_score = get_trend_score(name)
-        ranked_products.append({"name": name, "trend_score": trend_score, "url": product.get("url")})
+        url = product.get("url")
+        trend_score = get_trend_score(name, CATEGORIES[category], GEO_LOCATIONS[geo])
+        ranked_products.append({
+            "name": name,
+            "trend_score": trend_score,
+            "url": url
+        })
 
-    # 🔢 Trier par popularité décroissante
     ranked_products.sort(key=lambda x: x["trend_score"], reverse=True)
 
     return {"trending_products": ranked_products}
