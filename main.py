@@ -184,3 +184,28 @@ def get_trending_products():
     trending_products = [{"nom": p, "score_tendance": get_trending_score(p)} for p in products]
     trending_products.sort(key=lambda x: x["score_tendance"], reverse=True)
     return {"trending_products": trending_products[:10]}  # Top 10 produits
+
+# ✅ Popularité Google Trends
+def get_trending_score(product_name):
+    try:
+        pytrends = TrendReq(hl='fr-FR', tz=360)
+        pytrends.build_payload([product_name], timeframe='today 3-m', geo='FR')
+        trends_data = pytrends.interest_over_time()
+        return trends_data[product_name].mean() if not trends_data.empty else 0
+    except Exception as e:
+        print(f"❌ Erreur Google Trends : {e}")
+    return 0
+
+@app.get("/trending-products")
+def trending_products():
+    products = get_shopify_products()
+    trending = sorted(
+        [{"nom": p, "score_tendance": get_trending_score(p)} for p in products],
+        key=lambda x: x["score_tendance"], reverse=True
+    )[:10]
+    return {"trending_products": trending}
+
+@app.get("/shopping-insights")
+def shopping_insights(keyword: str, geo: str = "FR"):
+    insights = get_shopping_insights(keyword, geo)
+    return insights or {"error": "Erreur Shopping Insights"}
