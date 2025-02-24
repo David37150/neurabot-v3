@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pytrends.request import TrendReq  # 🔹 Import pour Google Trends
+from shopping_insights import get_shopping_insights  # ✅ Import ajouté
 
 # ✅ Charger les variables d'environnement (depuis Render)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
