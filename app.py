@@ -1,34 +1,53 @@
 import streamlit as st
 import requests
+import os
 
-# URL de l'API de NeuraBot
-API_URL = "https://neurabot-v3.onrender.com/ask"
+# URL de l'API
+API_URL = "https://neurabot-v3.onrender.com/trending-products"
 
-# Interface utilisateur
-st.set_page_config(page_title="NeuraBot", page_icon="🤖", layout="centered")
+# Récupérer la clé API depuis l'environnement Render
+SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY")
 
-st.title("🤖 NeuraBot - Chat / ADS  IA Assistance")
-st.write("Pose-moi une question et je vais chercher la réponse pour toi ! 🔍")
+st.title("🔥 Produits Tendance - NeuraMarkets")
 
-# Champ de saisie pour poser des questions
-user_input = st.text_input("Votre question :", "")
+# **Liste des catégories**
+categories = ["Beauté", "Santé", "Mode", "Électronique", "Informatique", "Enfant / Bébé", "Électroménager", "Sport"]
 
-if st.button("Poser la question"):
-    if user_input:
+# **Liste des zones géographiques**
+geo_options = ["France", "Europe", "USA"]
+
+# **Interface utilisateur**
+selected_category = st.selectbox("Catégorie :", categories)
+selected_geo = st.selectbox("Zone géographique :", geo_options)
+
+if st.button("Afficher les produits tendance"):
+    params = {
+        "category": selected_category,
+        "geo": selected_geo,
+        "api_key": SCRAPER_API_KEY  # Inclusion sécurisée de la clé API dans les requêtes
+    }
+
+    with st.spinner('⏳ Récupération des produits tendances en cours...'):
         try:
-            # Envoi de la requête à l'API
-            response = requests.get(API_URL, params={"question": user_input})
+            response = requests.get(API_URL, params=params)
+            response.raise_for_status()  # Vérifie si la réponse HTTP est valide
+
             data = response.json()
-            st.subheader("Réponse :")
-            st.write(data.get("response", "❌ Erreur : Aucune réponse reçue."))
+
+            if "trending_products" in data and data["trending_products"]:
+                trending = data["trending_products"]
+                st.subheader(f"🔝 Top Produits - {selected_category} en {selected_geo}")
+                for i, product in enumerate(trending, start=1):
+                    st.markdown(f"{i}. **[{product['name']}]({product['url']})** – "
+                                f"Score : {round(product['trend_score'], 2)}")
+            else:
+                st.warning("⚠️ Aucun produit tendance trouvé pour cette sélection.")
+
+        except requests.exceptions.RequestException as req_err:
+            st.error(f"❌ Erreur de requête HTTP : {req_err}")
+
+        except ValueError as json_err:
+            st.error(f"❌ Erreur de décodage JSON : {json_err}")
+
         except Exception as e:
-            st.error(f"❌ Erreur lors de la requête : {e}")
-    else:
-        st.warning("Veuillez entrer une question avant d'envoyer !")
-
-
-
-
-
-
-        
+            st.error(f"❌ Une erreur inattendue s'est produite : {e}")
