@@ -145,6 +145,9 @@ def ask(question: str):
         return {"error": f"❌ Erreur : {str(e)}"}
 
 # ✅ ROUTE PRODUITS TENDANCE
+
+# ✅ ROUTE PRODUITS TENDANCE (SHOPIFY + GOOGLE TRENDS + SHOPPING INSIGHTS)
+
 def get_shopify_products():
     """Récupère les produits depuis Shopify"""
     try:
@@ -154,7 +157,7 @@ def get_shopify_products():
             "X-Shopify-Access-Token": SHOPIFY_PASSWORD  # Utilisation du token au lieu du password
         }
 
-        response = requests.get(shopify_url, headers=headers, verify=False)  # ⚠ Désactiver SSL temporairement
+        response = requests.get(shopify_url, headers=headers, verify=False)  # ⚠️ Désactiver SSL temporairement
 
         if response.status_code == 200:
             return [product["title"] for product in response.json().get("products", [])]
@@ -164,7 +167,6 @@ def get_shopify_products():
     except Exception as e:
         print(f"❌ Erreur lors de la récupération des produits Shopify : {e}")
         return []
-
 
 def get_trending_score(product_name):
     """Analyse la popularité avec Google Trends"""
@@ -178,25 +180,6 @@ def get_trending_score(product_name):
         return 0
 
 @app.get("/trending-products")
-def get_trending_products():
-    """Endpoint pour récupérer les produits tendances"""
-    products = get_shopify_products()
-    trending_products = [{"nom": p, "score_tendance": get_trending_score(p)} for p in products]
-    trending_products.sort(key=lambda x: x["score_tendance"], reverse=True)
-    return {"trending_products": trending_products[:10]}  # Top 10 produits
-
-# ✅ Popularité Google Trends
-def get_trending_score(product_name):
-    try:
-        pytrends = TrendReq(hl='fr-FR', tz=360)
-        pytrends.build_payload([product_name], timeframe='today 3-m', geo='FR')
-        trends_data = pytrends.interest_over_time()
-        return trends_data[product_name].mean() if not trends_data.empty else 0
-    except Exception as e:
-        print(f"❌ Erreur Google Trends : {e}")
-    return 0
-
-@app.get("/trending-products")
 def trending_products():
     products = get_shopify_products()
     trending = sorted(
@@ -208,4 +191,4 @@ def trending_products():
 @app.get("/shopping-insights")
 def shopping_insights(keyword: str, geo: str = "FR"):
     insights = get_shopping_insights(keyword, geo)
-    return insights or {"error": "Erreur Shopping Insights"}
+    return insights if insights else {"error": "❌ Erreur Shopping Insights"}
