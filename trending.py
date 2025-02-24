@@ -1,8 +1,9 @@
-import time
+import os
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pytrends.request import TrendReq  
+from time import sleep
 
 # Initialiser FastAPI
 app = FastAPI()
@@ -16,7 +17,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Liste des catégories Google Trends
+# Configuration de Google Trends
+pytrends = TrendReq(hl="fr-FR", tz=360, retries=5, backoff_factor=0.2)
+
+# Catégories Google Trends
 CATEGORIES = {
     "Beauté": 44,
     "Santé": 45,
@@ -35,35 +39,30 @@ GEO_LOCATIONS = {
     "USA": "US"
 }
 
-# Fonction pour récupérer les produits de NeuraMarkets
+# Récupération des produits depuis NeuraMarkets
 def fetch_products():
     try:
         url = "https://neuramarkets.com/api/products"
         response = requests.get(url)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            print(f"⚠️ Erreur récupération produits: {response.status_code}")
-            return []
+        response.raise_for_status()
+        return response.json()
     except Exception as e:
-        print(f"❌ Erreur : {e}")
+        print(f"❌ Erreur récupération produits: {e}")
         return []
 
-# Fonction pour obtenir la tendance d'un produit via Google Trends avec gestion des pauses
+# Obtenir la tendance d'un produit via Google Trends
 def get_trend_score(product_name, category=0, geo='FR'):
     try:
-        pytrends = TrendReq(hl="fr-FR", tz=360)
         pytrends.build_payload([product_name], cat=category, timeframe="today 3-m", geo=geo, gprop="")
         trend_data = pytrends.interest_over_time()
-        time.sleep(2)  # pause de sécurité de 2 secondes
         if not trend_data.empty:
             return trend_data[product_name].mean()
         return 0
     except Exception as e:
-        print(f"❌ Erreur Google Trends pour '{product_name}': {e}")
+        print(f"❌ Erreur Google Trends pour {product_name}: {e}")
         return 0
 
-# Endpoint API optimisé pour éviter l'erreur 429
+# Endpoint API pour récupérer les produits tendances filtrés
 @app.get("/trending-products")
 def trending_products(category: str = "Beauté", geo: str = "France"):
     if category not in CATEGORIES or geo not in GEO_LOCATIONS:
@@ -73,18 +72,19 @@ def trending_products(category: str = "Beauté", geo: str = "France"):
     if not products:
         return {"error": "❌ Aucune donnée produit récupérée."}
 
-    # Limiter à 5 produits pour éviter les erreurs 429
     ranked_products = []
-    for product in products[:5]:
+    for idx, product in enumerate(products):
         name = product.get("name")
-        url = product.get("url")
         trend_score = get_trend_score(name, CATEGORIES[category], GEO_LOCATIONS[geo])
         ranked_products.append({
             "name": name,
             "trend_score": trend_score,
-            "url": url
+            "url": product.get("url")
         })
+
+        # 🕒 Pause de 3 secondes entre chaque requête
+        sleep(3)
 
     ranked_products.sort(key=lambda x: x["trend_score"], reverse=True)
 
-    return {"trending_products": ranked_products}
+    return {"trending_products": ranked_products[:10]}
