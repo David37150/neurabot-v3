@@ -1,5 +1,11 @@
 <?php
-session_start();
+ob_start(); // Active le tampon de sortie
+
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 
 // Informations de connexion à la base de données
 $servername = "db5017061512.hosting-data.io";
@@ -9,15 +15,13 @@ $dbname = "dbs13730611";
 
 // Créer la connexion
 $conn = new mysqli($servername, $username, $password, $dbname);
-
-// Vérifier la connexion
 if ($conn->connect_error) {
     die("Erreur : Impossible de se connecter à la base de données. " . $conn->connect_error);
 }
 
 ?>
 
-
+<?php include "pages/auth.php"; ?>
 <?php include './include/ressources.php'; ?>
 <body>
 <!-- Top Header -->
@@ -37,9 +41,18 @@ if ($conn->connect_error) {
 
         <div class="row align-items-center">
             <!-- Image à gauche (30%) -->
-            <div class="col-xs-12 col-sm-12 col-md-0 col-lg-3 col-xl-3 mb-2 text-center">
-                <div class="card h-100 p-4">
-                    <img src="https://neurainvests.com/img/design/ia-chat.png" alt="NeuraBot Logo" width="100%" style="max-width: 250px;">
+            <div class="col-xs-12 col-sm-12 col-md-0 col-lg-3 col-xl-3 mb-2 text-left">
+                <div class="card h-100 p-4 bg-neurainvets">
+                    <h5 class="text-left text-white">NeuraBot – Assistant IA Intelligent</h5>
+                    <p class="text-white mt-2"><strong>Optimisation, Analyse & Support – Tout en un !</strong></p>
+                    <p class="text-left text-white">NeuraBot est bien plus qu’un simple chatbot. Il joue un rôle essentiel au sein de NeuraInvests en assurant la connexion intelligente entre les plateformes publicitaires et d’investissement.</p>
+                    <h5 class="text-left text-white">Ce que NeuraBot :</h5>
+                    <ul class="text-left text-white">
+                        <li><strong>✅ Connexion API avancée :</strong> Automatise les échanges entre plateformes pour une gestion optimisée.</li>
+                        <li><strong>✅ Analyse des tendances en temps réel 📊 :</strong> Détecte et affiche les meilleures opportunités selon les emplacements publicitaires disponibles.</li>
+                        <li><strong>✅ Assistant 24/7 💬 :</strong> Répond à toutes vos questions sur <strong>NeuraInvests</strong>, l’investissement publicitaire et le support général.</li>
+                    </ul>
+                    <p class="text-left text-white mt-2"><strong>Posez-lui une question dès maintenant et découvrez NeuraBot en action ! ⚡</strong></p>
                 </div>
             </div>
 
@@ -62,25 +75,30 @@ if ($conn->connect_error) {
 
     <script>
         function askNeuraBot() {
-            let question = document.getElementById("question").value;
-            let responseDiv = document.getElementById("response");
-            
-            if (question.trim() === "") {
-                responseDiv.innerHTML = "<p style='color:red;'>Veuillez entrer une question.</p>";
-                return;
-            }
+        let question = document.getElementById("question").value;
+        let responseDiv = document.getElementById("response");
 
-            responseDiv.innerHTML = "<p>⏳ NeuraBot réfléchit...</p>";
-
-            fetch("https://neurabot.onrender.com/ask?question=" + encodeURIComponent(question))
-                .then(response => response.json())
-                .then(data => {
-                    responseDiv.innerHTML = "<p><strong>Réponse :</strong> " + data.response + "</p>";
-                })
-                .catch(error => {
-                    responseDiv.innerHTML = "<p style='color:red;'>❌ Erreur de connexion à l'API.</p>";
-                });
+        if (question.trim() === "") {
+            responseDiv.innerHTML = "<p style='color:red;'>Veuillez entrer une question.</p>";
+            return;
         }
+
+        responseDiv.innerHTML = "<p>⏳ NeuraBot réfléchit...</p>";
+
+        fetch("https://neurabot-v3.onrender.com/ask?question=" + encodeURIComponent(question))
+            .then(response => response.json())
+            .then(data => {
+                if (data.response) {
+                    responseDiv.innerHTML = "<p><strong>Réponse :</strong> " + data.response + "</p>";
+                } else {
+                    responseDiv.innerHTML = "<p style='color:red;'>❌ Erreur : Aucune réponse reçue.</p>";
+                }
+            })
+            .catch(error => {
+                responseDiv.innerHTML = "<p style='color:red;'>❌ Erreur de connexion à l'API.</p>";
+            });
+    }
+
     </script>
 
 <!-- translations -->
@@ -216,3 +234,15 @@ document.addEventListener('DOMContentLoaded', () => {
         
     </body>
     </html>
+
+
+
+    <?php
+//$api_url = "https://neurabot-v3.onrender.com/ask?question=Qui+est+Jésus-Christ+?";
+//$response = file_get_contents($api_url);
+//if ($response === FALSE) {
+//    echo "❌ Erreur de connexion à l'API depuis PHP.";
+//} else {
+//    echo "✅ Connexion réussie à l'API : " . $response;
+//}
+?>

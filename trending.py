@@ -4,6 +4,7 @@ import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pytrends.request import TrendReq  # 📌 Pour interagir avec Google Trends
+from shopping_insights import get_shopping_insights  # 📌 Ajout import Shopping Insights
 
 # Initialiser FastAPI
 app = FastAPI()
@@ -65,3 +66,12 @@ def trending_products():
     ranked_products.sort(key=lambda x: x["trend_score"], reverse=True)
 
     return {"trending_products": ranked_products}
+
+# 📌 Nouvelle route API pour Google Shopping Insights
+@app.get("/shopping-insights")
+def shopping_insights(keyword: str, geo: str = "FR"):
+    insights = get_shopping_insights(keyword, geo)
+    if insights:
+        return insights
+    else:
+        return {"error": "Impossible de récupérer les données Shopping Insights"}
