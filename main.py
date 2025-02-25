@@ -1,11 +1,13 @@
 import os
 import json
 import requests
-from fastapi import FastAPI
+import time
+import threading
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
-from pytrends.request import TrendReq  # 🔹 Import pour Google Trends
-from shopping_insights import get_shopping_insights  # ✅ Import ajouté
+from pytrends.request import TrendReq  # 🔹 Google Trends
+from shopping_insights import get_shopping_insights  # ✅ Shopping Insights
 
 # ✅ Charger les variables d'environnement (depuis Render)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -146,48 +148,83 @@ def ask(question: str):
 
 # ✅ ROUTE PRODUITS TENDANCE
 
-# ✅ ROUTE PRODUITS TENDANCE (SHOPIFY + GOOGLE TRENDS + SHOPPING INSIGHTS)
+# ✅ Initialiser Google Trends avec gestion des requêtes
+pytrends = TrendReq(hl="fr-FR", tz=360)
+request_lock = threading.Lock()  # Pour éviter les requêtes simultanées
+last_request_time = 0  # Stocker le temps de la dernière requête
+rate_limit_seconds = 5  # ⏳ Délai minimum entre deux requêtes
 
-def get_shopify_products():
-    """Récupère les produits depuis Shopify"""
+# ✅ Stockage en cache pour éviter les requêtes répétées
+cache_tendances = {}
+
+# ✅ Récupérer les produits Shopify
+def get_shopify_products(category=None):
     try:
-        shopify_url = f"https://{SHOPIFY_STORE_NAME}.myshopify.com/admin/api/2023-01/products.json"
-        
-        headers = {
-            "X-Shopify-Access-Token": SHOPIFY_PASSWORD  # Utilisation du token au lieu du password
-        }
-
-        response = requests.get(shopify_url, headers=headers, verify=False)  # ⚠️ Désactiver SSL temporairement
+        url = f"https://{SHOPIFY_STORE_NAME}.myshopify.com/admin/api/2023-01/products.json"
+        headers = {"X-Shopify-Access-Token": SHOPIFY_PASSWORD}
+        response = requests.get(url, headers=headers, verify=False)
 
         if response.status_code == 200:
-            return [product["title"] for product in response.json().get("products", [])]
+            products = response.json().get("products", [])
+            if category:
+                return [p["title"] for p in products if category.lower() in p.get("product_type", "").lower()]
+            return [p["title"] for p in products]
         else:
-            print(f"⚠️ Erreur Shopify : {response.status_code} - {response.text}")
+            print(f"⚠️ Erreur Shopify : {response.status_code}")
             return []
     except Exception as e:
-        print(f"❌ Erreur lors de la récupération des produits Shopify : {e}")
+        print(f"❌ Erreur Shopify : {e}")
         return []
 
-def get_trending_score(product_name):
-    """Analyse la popularité avec Google Trends"""
+# ✅ Obtenir la tendance d’un produit avec gestion des quotas API
+def get_trend_score(product_name, geo="FR"):
+    global last_request_time
     try:
-        pytrends = TrendReq(hl='fr-FR', tz=360)
-        pytrends.build_payload([product_name], timeframe='today 3-m', geo='FR')
-        trends_data = pytrends.interest_over_time()
-        return trends_data[product_name].mean() if not trends_data.empty else 0
+        with request_lock:
+            current_time = time.time()
+            time_since_last_request = current_time - last_request_time
+            if time_since_last_request < rate_limit_seconds:
+                time.sleep(rate_limit_seconds - time_since_last_request)
+            
+            pytrends.build_payload([product_name], timeframe="now 7-d", geo=geo)
+            trend_data = pytrends.interest_over_time()
+            last_request_time = time.time()
+
+            if not trend_data.empty:
+                return trend_data[product_name].mean()
+            return 0
     except Exception as e:
-        print(f"❌ Erreur Google Trends : {e}")
+        print(f"❌ Erreur Google Trends pour {product_name} : {e}")
         return 0
 
+# ✅ Endpoint pour récupérer les produits tendances (avec limitation)
 @app.get("/trending-products")
-def trending_products():
-    products = get_shopify_products()
+def trending_products(category: str = Query(None), geo: str = "FR", max_products: int = 10):
+    global cache_tendances
+
+    # Vérifier si la catégorie existe dans le cache
+    cache_key = f"{category}_{geo}_{max_products}"
+    if cache_key in cache_tendances:
+        print("✅ Résultats récupérés depuis le cache")
+        return {"trending_products": cache_tendances[cache_key]}
+
+    # Récupérer les produits Shopify filtrés par catégorie
+    products = get_shopify_products(category)
+
+    # Limiter le nombre de produits analysés
+    selected_products = products[:max_products]
+
+    # Analyser les tendances avec Google Trends
     trending = sorted(
-        [{"nom": p, "score_tendance": get_trending_score(p)} for p in products],
+        [{"nom": p, "score_tendance": get_trend_score(p, geo)} for p in selected_products],
         key=lambda x: x["score_tendance"], reverse=True
-    )[:10]
+    )
+
+    # Enregistrer dans le cache pour éviter les requêtes inutiles
+    cache_tendances[cache_key] = trending
     return {"trending_products": trending}
 
+# ✅ Endpoint pour récupérer les Shopping Insights avec catégorie
 @app.get("/shopping-insights")
 def shopping_insights(keyword: str, geo: str = "FR"):
     insights = get_shopping_insights(keyword, geo)
